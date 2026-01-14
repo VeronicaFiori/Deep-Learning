@@ -116,8 +116,18 @@ class Flickr8kCachedDataset(Dataset):
     def __getitem__(self, idx: int):
         image_id = self.image_ids[idx]
         path = os.path.join(self.images_dir, image_id)
-        img = Image.open(path).convert("RGB")
+        #img = Image.open(path).convert("RGB")
+        #img = self.transform(img)
+        try:
+            img = Image.open(path).convert("RGB")
+        except FileNotFoundError:
+            # immagine mancante: prova a prendere un altro esempio
+            new_idx = (idx + 1) % len(self.image_ids)
+            return self.__getitem__(new_idx)
         img = self.transform(img)
+
+
+
 
         caps = self.captions_encoded[image_id]
         cap_ids = random.choice(caps) if self.sample_caption else caps[0]
