@@ -1,8 +1,29 @@
+#torch
+#torchvision
+#tqdm
+#numpy
+#pillow
+#pyyaml
+#streamlit
+#nltk
+
+
 torch
 torchvision
 tqdm
-numpy
-pillow
 pyyaml
-streamlit
+numpy
+Pillow
 nltk
+streamlit
+
+# Captioning eval
+git+https://github.com/salaniz/pycocoevalcap
+
+# Hallucination / detection
+ultralytics
+
+# VLM Judge
+transformers>=4.38
+accelerate
+qwen-vl-utils

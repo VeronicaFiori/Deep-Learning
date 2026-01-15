@@ -93,8 +93,17 @@ def main():
     use_amp = bool(cfg["train"].get("amp", False)) and device.type == "cuda"
     scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
+    #save_dir = cfg["train"]["save_dir"]
+    #ensure_dir(save_dir)
     save_dir = cfg["train"]["save_dir"]
-    ensure_dir(save_dir)
+    os.makedirs(save_dir, exist_ok=True)
+
+    with open(os.path.join(save_dir, "config_used.yaml"), "w", encoding="utf-8") as f:
+        yaml.safe_dump(cfg, f, sort_keys=False)
+
+    # quando hai vocab:
+    vocab.to_json(os.path.join(save_dir, "vocab.json"))
+
 
     best_val = 1e9
 
