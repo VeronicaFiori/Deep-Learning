@@ -1,7 +1,14 @@
-import sys, os
+#import sys, os
 
-from src import model
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+#from src import model
+#sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+import os, sys
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+
 import json
 import argparse
 import yaml
@@ -64,24 +71,28 @@ def main():
     train_ds = Flickr8kCachedDataset(root, cfg["data"]["images_dir"], splits["train"], encoded, train_tf, sample_caption=True)
     val_ds = Flickr8kCachedDataset(root, cfg["data"]["images_dir"], splits["val"], encoded, val_tf, sample_caption=False)
 
+    max_len = cfg["data"]["max_len"]
+
     train_loader = DataLoader(
         train_ds,
         batch_size=cfg["train"]["batch_size"],
         shuffle=True,
         num_workers=cfg["train"]["num_workers"],
+        collate_fn=lambda b: collate_fn(b, vocab.pad_id, vocab.bos_id, max_len),
         pin_memory=(device.type == "cuda"),
         persistent_workers=(cfg["train"]["num_workers"] > 0),
-        prefetch_factor=2 if cfg["train"]["num_workers"] > 0 else None,
-        collate_fn=lambda b: collate_fn(b, vocab.pad_id),
     )
+
     val_loader = DataLoader(
         val_ds,
         batch_size=cfg["train"]["batch_size"],
         shuffle=False,
         num_workers=cfg["train"]["num_workers"],
+        collate_fn=lambda b: collate_fn(b, vocab.pad_id, vocab.bos_id, max_len),
         pin_memory=(device.type == "cuda"),
-        collate_fn=lambda b: collate_fn(b, vocab.pad_id),
+        persistent_workers=(cfg["train"]["num_workers"] > 0),
     )
+
 
     model = Captioner(
         vocab_size=len(vocab.itos),
