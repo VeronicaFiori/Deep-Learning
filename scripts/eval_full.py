@@ -102,7 +102,7 @@ def main():
         (Meteor(), "METEOR"),
         (Rouge(), "ROUGE-L"),
         (Cider(), "CIDEr"),
-        (Spice(), "SPICE"),
+        #(Spice(), "SPICE"),
     ]
 
     results = {}
