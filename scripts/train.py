@@ -1,4 +1,6 @@
 import sys, os
+
+from src import model
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import json
 import argparse
@@ -27,8 +29,13 @@ def validate(model, loader, loss_fn, device):
     for batch in loader:
         images = batch["image"].to(device)
         caps = batch["caption_ids"].to(device)
-        logits = model(images, caps)
+        #logits = model(images, caps)
+        lengths = batch["caption_len"].to(device)
+        logits = model(images, caps, lengths=lengths)
+
         targets = caps[:, 1:]
+        targets = targets[:, :logits.size(1)]
+
         loss = loss_fn(logits.reshape(-1, logits.size(-1)), targets.reshape(-1))
         total += float(loss.item()) * images.size(0)
         n += images.size(0)
@@ -63,6 +70,8 @@ def main():
         shuffle=True,
         num_workers=cfg["train"]["num_workers"],
         pin_memory=(device.type == "cuda"),
+        persistent_workers=(cfg["train"]["num_workers"] > 0),
+        prefetch_factor=2 if cfg["train"]["num_workers"] > 0 else None,
         collate_fn=lambda b: collate_fn(b, vocab.pad_id),
     )
     val_loader = DataLoader(
@@ -119,8 +128,11 @@ def main():
             optim.zero_grad(set_to_none=True)
 
             with torch.cuda.amp.autocast(enabled=use_amp):
-                logits = model(images, caps)
+                #logits = model(images, caps)
+                lengths = batch["caption_len"].to(device)
+                logits = model(images, caps, lengths=lengths)
                 targets = caps[:, 1:]
+                targets = targets[:, :logits.size(1)]
                 loss = loss_fn(logits.reshape(-1, logits.size(-1)), targets.reshape(-1))
 
             scaler.scale(loss).backward()

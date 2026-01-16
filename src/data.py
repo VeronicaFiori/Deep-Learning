@@ -4,6 +4,8 @@ import re
 import random
 from dataclasses import dataclass
 from typing import Dict, List
+from src.control_tokens import prepend_controls
+
 
 import torch
 from torch.utils.data import Dataset
@@ -11,6 +13,20 @@ from PIL import Image
 from torchvision import transforms
 
 SPECIALS = ["<pad>", "<bos>", "<eos>", "<unk>"]
+
+STYLE_TOKENS = [
+    "<style:neutral>",
+    "<style:technical>",
+    "<style:poetic>",
+    "<style:funny>",
+]
+
+FOCUS_TOKENS = [
+    "<focus:objects>",
+    "<focus:colors>",
+    "<focus:actions>",
+]
+
 
 def simple_tokenize(s: str) -> List[str]:
     s = s.lower().strip()
@@ -55,7 +71,7 @@ def build_vocab(captions: List[str], min_freq: int) -> Vocab:
     for c in captions:
         counter.update(simple_tokenize(c))
     words = [w for w, f in counter.items() if f >= min_freq]
-    itos = SPECIALS + sorted(words)
+    itos = SPECIALS + STYLE_TOKENS + FOCUS_TOKENS + sorted(words)
     stoi = {w: i for i, w in enumerate(itos)}
     return Vocab(stoi=stoi, itos=itos,
                  pad_id=stoi["<pad>"], bos_id=stoi["<bos>"],
@@ -131,7 +147,9 @@ class Flickr8kCachedDataset(Dataset):
 
         caps = self.captions_encoded[image_id]
         cap_ids = random.choice(caps) if self.sample_caption else caps[0]
-        return {"image": img, "cap_ids": cap_ids, "cap_len": len(cap_ids), "image_id": image_id}
+        return {"image": img, "cap_ids": cap_ids, "cap_len": len(cap_ids), "image_id": image_id,
+                "style": None,"focus": None,}
+'''
 
 def collate_fn(batch, pad_id: int):
     batch = sorted(batch, key=lambda x: x["cap_len"], reverse=True)
@@ -145,3 +163,37 @@ def collate_fn(batch, pad_id: int):
         caps[i, :len(ids)] = torch.tensor(ids, dtype=torch.long)
 
     return {"image": images, "caption_ids": caps, "caption_len": lengths, "image_id": [b["image_id"] for b in batch]}
+'''
+
+def collate_fn(batch, pad_id, bos_id, max_len):
+    batch = sorted(batch, key=lambda x: x["cap_len"], reverse=True)
+    images = torch.stack([b["image"] for b in batch], 0)
+
+    cap_list = []
+    len_list = []
+    for b in batch:
+        cap_ids = b["cap_ids"]
+        cap_ids = prepend_controls(
+            cap_ids,
+            bos_id=bos_id,
+            style_id=b.get("style", None),
+            focus_id=b.get("focus", None),
+            max_len=max_len
+        )
+        cap_t = torch.tensor(cap_ids, dtype=torch.long)
+        cap_list.append(cap_t)
+        len_list.append(cap_t.numel())
+
+    maxL = max(len_list)
+    caps = torch.full((len(batch), maxL), pad_id, dtype=torch.long)
+    for i, cap in enumerate(cap_list):
+        caps[i, :cap.numel()] = cap
+
+    lengths = torch.tensor(len_list, dtype=torch.long)
+
+    return {
+        "image": images,
+        "caption_ids": caps,
+        "caption_len": lengths,
+        "image_id": [b["image_id"] for b in batch],
+    }

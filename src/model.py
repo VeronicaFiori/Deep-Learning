@@ -47,18 +47,56 @@ class DecoderLSTMAttn(nn.Module):
         c = torch.tanh(self.init_c(mean))
         return h, c
 
-    def forward(self, feats, captions_ids):
+    #def forward(self, feats, captions_ids):
+    #    B, L = captions_ids.shape
+    #    h, c = self.init_state(feats)
+    #    emb = self.embed(captions_ids)
+
+    #   logits_steps = []
+    #    for t in range(L - 1):
+    #        ctx, _ = self.attn(feats, h)
+    #        x = torch.cat([emb[:, t, :], ctx], dim=1)
+    #        h, c = self.lstm(x, (h, c))
+    #        logits_steps.append(self.fc(self.dropout(h)))
+    #    return torch.stack(logits_steps, dim=1)
+
+    def forward(self, feats, captions_ids, lengths=None):
+        """
+        feats: (B, 49, 2048)
+        captions_ids: (B, L)  incl. <bos> ... <eos> ... <pad>
+        lengths: (B,) lunghezze reali incl. bos/eos (stesso 'cap_len' del collate)
+        """
         B, L = captions_ids.shape
         h, c = self.init_state(feats)
         emb = self.embed(captions_ids)
 
-        logits_steps = []
-        for t in range(L - 1):
-            ctx, _ = self.attn(feats, h)
-            x = torch.cat([emb[:, t, :], ctx], dim=1)
-            h, c = self.lstm(x, (h, c))
-            logits_steps.append(self.fc(self.dropout(h)))
-        return torch.stack(logits_steps, dim=1)
+        if lengths is None:
+            # fallback: comportamento vecchio
+            logits_steps = []
+            for t in range(L - 1):
+                ctx, _ = self.attn(feats, h)
+                x = torch.cat([emb[:, t, :], ctx], dim=1)
+                h, c = self.lstm(x, (h, c))
+                logits_steps.append(self.fc(self.dropout(h)))
+            return torch.stack(logits_steps, dim=1)
+
+        # --- fast path: shrink batch over time ---
+        # lengths include BOS+EOS; targets are captions_ids[:, 1:], so usable steps are lengths-1
+        max_steps = int(lengths.max().item()) - 1  # steps on which we predict next token
+        logits = feats.new_zeros((B, max_steps, self.fc.out_features))
+
+        for t in range(max_steps):
+            batch_size_t = int((lengths > (t + 0)).sum().item())
+            # t indexes input token position; we predict token at t+1
+            ctx, _ = self.attn(feats[:batch_size_t], h[:batch_size_t])
+            x = torch.cat([emb[:batch_size_t, t, :], ctx], dim=1)
+            h_t, c_t = self.lstm(x, (h[:batch_size_t], c[:batch_size_t]))
+            h = torch.cat([h_t, h[batch_size_t:]], dim=0)
+            c = torch.cat([c_t, c[batch_size_t:]], dim=0)
+            logits[:batch_size_t, t, :] = self.fc(self.dropout(h_t))
+
+        return logits
+
 
 class Captioner(nn.Module):
     def __init__(self, vocab_size: int, fine_tune_encoder: bool, embed_dim: int, hidden_dim: int, attn_dim: int, dropout: float):
@@ -66,6 +104,9 @@ class Captioner(nn.Module):
         self.encoder = EncoderCNN(fine_tune=fine_tune_encoder)
         self.decoder = DecoderLSTMAttn(vocab_size, embed_dim=embed_dim, hidden_dim=hidden_dim, attn_dim=attn_dim, dropout=dropout)
 
-    def forward(self, images, captions_ids):
+    #def forward(self, images, captions_ids):
+    #    feats = self.encoder(images)
+    #    return self.decoder(feats, captions_ids)
+    def forward(self, images, captions_ids, lengths=None):
         feats = self.encoder(images)
-        return self.decoder(feats, captions_ids)
+        return self.decoder(feats, captions_ids, lengths=lengths)

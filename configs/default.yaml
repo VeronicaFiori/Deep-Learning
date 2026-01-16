@@ -2,7 +2,7 @@ seed: 42
 device: "cuda"   # set to "cpu" if no NVIDIA GPU
 
 data:
-  root: "data/flickr8k"
+  root: "/content/drive/MyDrive/data/flickr8k" #"data/flickr8k"
   images_dir: "Images"
   captions_file: "Flickr8k.token.txt"
   train_list: "Flickr_8k.trainImages.txt"
@@ -18,10 +18,12 @@ train:
   weight_decay: 0.0001
   grad_clip: 2.0
   num_workers: 2
-  save_dir: G:\Il mio Drive\runs\flickr8k_mid  #"runs/flickr8k_mid"
+  save_dir: "/content/drive/MyDrive/runs/flickr8k_mid"  #"runs/flickr8k_mid"
   print_every: 50
   beam_size_eval: 5
   amp: true
+  pin_memory: true
+  persistent_workers: true
 
 model:
   embed_dim: 256

@@ -1,66 +1,97 @@
-# scripts/eval_full.py
-import os, json, argparse, yaml
-from tqdm import tqdm
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+import json, argparse, yaml
 from collections import defaultdict
+from tqdm import tqdm
 
 import torch
+from torch.utils.data import DataLoader
+
 from pycocoevalcap.bleu.bleu import Bleu
 from pycocoevalcap.meteor.meteor import Meteor
+from pycocoevalcap.rouge.rouge import Rouge
 from pycocoevalcap.cider.cider import Cider
 from pycocoevalcap.spice.spice import Spice
 
-from src.model import CaptioningModel
-from src.data import Vocab, Flickr8kCachedDataset
-from src.utils import beam_search
+from src.data import Vocab, build_transforms, parse_flickr8k_captions, Flickr8kCachedDataset, collate_fn
+from src.model import Captioner
+from src.utils import load_checkpoint
+from src.decode import beam_search
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--config", required=True)
-    ap.add_argument("--ckpt", required=True)
-    ap.add_argument("--beam", type=int, default=5)
+    ap.add_argument("--config", default="configs/default.yaml")
+    ap.add_argument("--ckpt", default=None)
     ap.add_argument("--max_samples", type=int, default=None)
     args = ap.parse_args()
 
     cfg = yaml.safe_load(open(args.config, "r", encoding="utf-8"))
-    device = torch.device(cfg["device"])
 
+    device_str = cfg["device"]
+    if device_str == "cuda" and not torch.cuda.is_available():
+        device_str = "cpu"
+    device = torch.device(device_str)
+
+    root = cfg["data"]["root"]
+    prep = os.path.join(root, "prepared")
     save_dir = cfg["train"]["save_dir"]
     eval_dir = os.path.join(save_dir, "eval")
     os.makedirs(eval_dir, exist_ok=True)
 
     vocab = Vocab.from_json(os.path.join(save_dir, "vocab.json"))
+    splits = json.load(open(os.path.join(prep, "splits.json"), "r", encoding="utf-8"))
+    encoded = torch.load(os.path.join(prep, "captions_encoded.pt"), map_location="cpu")["encoded"]
 
-    dataset = Flickr8kCachedDataset(
-        cfg, split="test", vocab=vocab
-    )
+    ckpt_path = args.ckpt or os.path.join(save_dir, "best.pt")
 
-    model = CaptioningModel(cfg, vocab).to(device)
-    model.load_state_dict(torch.load(args.ckpt, map_location=device))
+    model = Captioner(
+        vocab_size=len(vocab.itos),
+        fine_tune_encoder=cfg["model"]["fine_tune_encoder"],
+        embed_dim=cfg["model"]["embed_dim"],
+        hidden_dim=cfg["model"]["hidden_dim"],
+        attn_dim=cfg["model"]["attn_dim"],
+        dropout=cfg["model"]["dropout"],
+    ).to(device)
+    load_checkpoint(ckpt_path, model, optimizer=None, map_location=device)
     model.eval()
+
+    tf = build_transforms(train=False)
+    test_ds = Flickr8kCachedDataset(root, cfg["data"]["images_dir"], splits["test"], encoded, tf, sample_caption=False)
+    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=0,
+                             collate_fn=lambda b: collate_fn(b, vocab.pad_id))
+
+    caps_map = parse_flickr8k_captions(os.path.join(root, cfg["data"]["captions_file"]))
 
     refs = defaultdict(list)
     hyps = {}
 
-    for i, sample in enumerate(tqdm(dataset)):
-        if args.max_samples and i >= args.max_samples:
+    for i, batch in enumerate(tqdm(test_loader, desc="eval_full")):
+        if args.max_samples is not None and i >= args.max_samples:
             break
 
-        image, _, img_id, captions = sample
-        image = image.unsqueeze(0).to(device)
+        image = batch["image"].squeeze(0).to(device)
+        image_id = batch["image_id"][0]
 
         with torch.no_grad():
-            pred_ids = beam_search(model, image, vocab, beam_size=args.beam)
-        pred = vocab.decode(pred_ids)
+            seq = beam_search(
+                model, image, vocab.bos_id, vocab.eos_id, vocab.pad_id,
+                beam_size=cfg["train"]["beam_size_eval"],
+                max_len=cfg["data"]["max_len"],
+                device=device
+            )
+        pred = vocab.decode(seq)
 
-        hyps[img_id] = [pred]
-        for c in captions:
-            refs[img_id].append(c)
+        hyps[image_id] = [pred]
+        for c in caps_map[image_id]:
+            refs[image_id].append(c)
 
     scorers = [
         (Bleu(4), ["BLEU-1","BLEU-2","BLEU-3","BLEU-4"]),
         (Meteor(), "METEOR"),
+        (Rouge(), "ROUGE-L"),
         (Cider(), "CIDEr"),
-        (Spice(), "SPICE")
+        (Spice(), "SPICE"),
     ]
 
     results = {}
@@ -68,14 +99,15 @@ def main():
         score, _ = scorer.compute_score(refs, hyps)
         if isinstance(name, list):
             for n, s in zip(name, score):
-                results[n] = s
+                results[n] = float(s)
         else:
-            results[name] = score
+            results[name] = float(score)
 
-    with open(os.path.join(eval_dir, "metrics_coco.json"), "w") as f:
-        json.dump(results, f, indent=2)
+    out_path = os.path.join(eval_dir, "metrics_full.json")
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2, ensure_ascii=False)
 
-    print("Saved metrics to", eval_dir)
+    print("Saved:", out_path)
     print(results)
 
 if __name__ == "__main__":

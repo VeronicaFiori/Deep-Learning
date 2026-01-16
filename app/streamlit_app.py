@@ -40,8 +40,22 @@ def main():
     st.title("Flickr8k Captioning — ResNet50 + Attention + LSTM")
 
     st.sidebar.header("Decoding")
+    #mode = st.sidebar.selectbox("Mode", ["greedy", "beam"])
+    #beam_k = st.sidebar.slider("Beam size", 2, 10, 5)
     mode = st.sidebar.selectbox("Mode", ["greedy", "beam"])
     beam_k = st.sidebar.slider("Beam size", 2, 10, 5)
+
+    detail = st.sidebar.radio("Dettaglio", ["breve", "dettagliato"], index=0)
+
+    if detail == "breve":
+        max_len = st.sidebar.slider("Max len", 8, 24, 16)
+        alpha = st.sidebar.slider("Length norm alpha", 0.5, 1.5, 1.0)
+        min_len = st.sidebar.slider("Min len", 1, 6, 1)
+    else:
+        max_len = st.sidebar.slider("Max len", 16, 60, 40)
+        alpha = st.sidebar.slider("Length norm alpha", 0.0, 1.2, 0.6)
+        min_len = st.sidebar.slider("Min len", 1, 12, 6)
+
 
     cfg, device, vocab, model, tf = load_everything()
 
@@ -55,11 +69,19 @@ def main():
 
     if st.button("Genera caption"):
         x = tf(img)
+        
+        
         if mode == "greedy":
-            seq = greedy_decode(model, x, vocab.bos_id, vocab.eos_id, max_len=cfg["data"]["max_len"], device=device)
+            seq = greedy_decode(model, x, vocab.bos_id, vocab.eos_id, max_len=max_len, device=device, min_len=min_len)
         else:
-            seq = beam_search(model, x, vocab.bos_id, vocab.eos_id, vocab.pad_id,
-                              beam_size=beam_k, max_len=cfg["data"]["max_len"], device=device)
+            seq = beam_search(
+                model, x, vocab.bos_id, vocab.eos_id, vocab.pad_id,
+                beam_size=beam_k, max_len=max_len, device=device,
+                alpha=alpha, min_len=min_len
+            )
+
+        
+        
         st.success(vocab.decode(seq))
 
 if __name__ == "__main__":
