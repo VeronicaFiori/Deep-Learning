@@ -1,3 +1,4 @@
+from platform import processor
 import sys, os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -76,18 +77,20 @@ def main():
                 )
             caption = vocab.decode(seq)
 
-            # 2) judge prompt (chiedi JSON “pulito”)
-            prompt = (
-                "Sei un valutatore di image captioning.\n"
-                "Dato input immagine e caption, valuta fedelta' e allucinazioni.\n"
-                "Rispondi SOLO con un JSON valido (niente testo extra) con campi:\n"
-                "{faithfulness: 0-5, hallucination: 0-5, coverage: 0-5, notes: string}.\n\n"
-                f"CAPTION: {caption}"
-            )
+            messages = build_messages(caption)
+            text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
-            inputs = processor(images=image_pil, text=prompt, return_tensors="pt").to(judge.device)
+            inputs = processor(
+                 images=image_pil,
+                 text=text,
+                 return_tensors="pt"
+            )
+            # IMPORTANT: non fare .to(judge.device) su dict "misto" a caso.
+            # Sposta solo i tensori:
+            inputs = {k: v.to(judge.device) if hasattr(v, "to") else v for k, v in inputs.items()}
+
             out = judge.generate(**inputs, max_new_tokens=200)
-            judge_text = processor.decode(out[0], skip_special_tokens=True)
+            judge_text = processor.batch_decode(out, skip_special_tokens=True)[0].strip()
 
             w.write(json.dumps({
                 "image": img_id,
@@ -96,6 +99,26 @@ def main():
             }, ensure_ascii=False) + "\n")
 
     print("Saved:", out_path)
+
+def build_messages(caption: str):
+    return [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image"},
+                {
+                    "type": "text",
+                    "text": (
+                        "Sei un valutatore di image captioning.\n"
+                        "Valuta la caption rispetto all'immagine.\n"
+                        "Rispondi SOLO con un JSON valido (niente testo extra) con campi:\n"
+                        "{faithfulness: 0-5, hallucination: 0-5, coverage: 0-5, notes: string}.\n\n"
+                        f"CAPTION: {caption}"
+                    ),
+                },
+            ],
+        }
+    ]
 
 if __name__ == "__main__":
     main()
