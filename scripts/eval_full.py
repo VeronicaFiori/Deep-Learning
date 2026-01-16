@@ -58,8 +58,19 @@ def main():
 
     tf = build_transforms(train=False)
     test_ds = Flickr8kCachedDataset(root, cfg["data"]["images_dir"], splits["test"], encoded, tf, sample_caption=False)
-    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=0,
-                             collate_fn=lambda b: collate_fn(b, vocab.pad_id))
+    #test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=0,
+     #                        collate_fn=lambda b: collate_fn(b, vocab.pad_id))
+
+    max_len = cfg["data"]["max_len"]
+
+    test_loader = DataLoader(
+        test_ds,
+        batch_size=1,
+        shuffle=False,
+        num_workers=0,
+        collate_fn=lambda b: collate_fn(b, vocab.pad_id, vocab.bos_id, max_len)
+    )
+
 
     caps_map = parse_flickr8k_captions(os.path.join(root, cfg["data"]["captions_file"]))
 
