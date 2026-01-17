@@ -19,7 +19,7 @@ train:
   weight_decay: 1e-2
   grad_clip: 5.0
   num_workers: 2
-  save_dir: "runs/flickr8k_mid" #"/content/drive/MyDrive/runs/flickr8k_mid"  #"runs/flickr8k_mid"
+  save_dir: "/content/drive/MyDrive/runs/flickr8k_mid"  #"runs/flickr8k_mid"
   print_every: 50
   beam_size_eval: 5
   amp: true
