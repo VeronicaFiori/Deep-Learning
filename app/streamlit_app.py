@@ -1,4 +1,5 @@
 import os
+from statistics import mode
 import yaml
 import torch
 import streamlit as st
@@ -12,7 +13,7 @@ from src.decode import greedy_decode, beam_search
 @st.cache_resource
 def load_everything():
     cfg = yaml.safe_load(open("configs/default.yaml", "r", encoding="utf-8"))
-
+    
     device_str = cfg["device"]
     if device_str == "cuda" and not torch.cuda.is_available():
         device_str = "cpu"
@@ -22,6 +23,14 @@ def load_everything():
     ckpt_path = os.path.join(cfg["train"]["save_dir"], "best.pt")
 
     vocab = Vocab.from_json(vocab_path)
+
+    st.sidebar.write("save_dir:", cfg["train"]["save_dir"])
+    st.sidebar.write("vocab_path:", vocab_path, os.path.exists(vocab_path))
+    st.sidebar.write("ckpt_path:", ckpt_path, os.path.exists(ckpt_path))
+
+    if not os.path.exists(vocab_path) or not os.path.exists(ckpt_path):
+        st.error("Checkpoint o vocab non trovati: controlla train.save_dir nel default.yaml")
+        st.stop()
 
     model = Captioner(
         vocab_size=len(vocab.itos),
@@ -39,27 +48,15 @@ def load_everything():
 def main():
     st.title("Flickr8k Captioning — ResNet50 + Attention + LSTM")
 
+    cfg, device, vocab, model, tf = load_everything()
+
     st.sidebar.header("Decoding")
-    #mode = st.sidebar.selectbox("Mode", ["greedy", "beam"])
-    #beam_k = st.sidebar.slider("Beam size", 2, 10, 5)
     mode = st.sidebar.selectbox("Mode", ["greedy", "beam"])
     beam_k = st.sidebar.slider("Beam size", 2, 10, 5)
 
-    detail = st.sidebar.radio("Dettaglio", ["breve", "dettagliato"], index=0)
+    
 
-    if detail == "breve":
-        max_len = st.sidebar.slider("Max len", 8, 24, 16)
-        alpha = st.sidebar.slider("Length norm alpha", 0.5, 1.5, 1.0)
-        min_len = st.sidebar.slider("Min len", 1, 6, 1)
-    else:
-        max_len = st.sidebar.slider("Max len", 16, 60, 40)
-        alpha = st.sidebar.slider("Length norm alpha", 0.0, 1.2, 0.6)
-        min_len = st.sidebar.slider("Min len", 1, 12, 6)
-
-
-    cfg, device, vocab, model, tf = load_everything()
-
-    up = st.file_uploader("Carica un'immagine (jpg/png)", type=["jpg","jpeg","png"])
+    up = st.file_uploader("Carica un'immagine (jpg/png)", type=["jpg", "jpeg", "png"])
     if up is None:
         st.info("Allena il modello (best.pt + vocab.json) e poi carica un'immagine.")
         return
@@ -67,22 +64,51 @@ def main():
     img = Image.open(up).convert("RGB")
     st.image(img, use_container_width=True)
 
-    if st.button("Genera caption"):
-        x = tf(img)
-        
-        
-        if mode == "greedy":
-            seq = greedy_decode(model, x, vocab.bos_id, vocab.eos_id, max_len=max_len, device=device, min_len=min_len)
-        else:
-            seq = beam_search(
-                model, x, vocab.bos_id, vocab.eos_id, vocab.pad_id,
-                beam_size=beam_k, max_len=max_len, device=device,
-                alpha=alpha, min_len=min_len
-            )
+    x = tf(img)  # preparo una volta sola
 
-        
-        
-        st.success(vocab.decode(seq))
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("Genera descrizione breve"):
+            # set “breve”
+            max_len = 16
+            alpha = 1.0
+            min_len = 1
+
+            if mode == "greedy":
+                seq = greedy_decode(
+                    model, x, vocab.bos_id, vocab.eos_id,
+                    max_len=max_len, device=device, min_len=min_len
+                )
+            else:
+                seq = beam_search(
+                    model, x, vocab.bos_id, vocab.eos_id, vocab.pad_id,
+                    beam_size=beam_k, max_len=max_len, device=device,
+                    alpha=alpha, min_len=min_len
+                )
+
+            st.success(vocab.decode(seq))
+
+    with col2:
+        if st.button("Genera descrizione più dettagliata"):
+            # set “dettagliato”
+            max_len = 40
+            alpha = 0.6
+            min_len = 6
+
+            if mode == "greedy":
+                seq = greedy_decode(
+                    model, x, vocab.bos_id, vocab.eos_id,
+                    max_len=max_len, device=device, min_len=min_len
+                )
+            else:
+                seq = beam_search(
+                    model, x, vocab.bos_id, vocab.eos_id, vocab.pad_id,
+                    beam_size=beam_k, max_len=max_len, device=device,
+                    alpha=alpha, min_len=min_len
+                )
+
+            st.success(vocab.decode(seq))
 
 if __name__ == "__main__":
     main()
