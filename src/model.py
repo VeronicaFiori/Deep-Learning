@@ -262,10 +262,11 @@ class DecoderLSTMAttn(nn.Module):
         lengths: (B,) real lengths incl BOS/EOS
         returns logits: (B, T, V) where T = max_steps = max(lengths)-1
         """
-        N = feats.size(1)  # num regions, 196 se 14x14
-        alphas = feats.new_zeros((B, max_steps, N))
+       
 
         B, L = captions_ids.shape
+        N = feats.size(1)  # num regions, 196 se 14x14
+
         h, c = self.init_state(feats)
         emb = self.embed(captions_ids)  # (B,L,E)
 
@@ -284,15 +285,21 @@ class DecoderLSTMAttn(nn.Module):
             return torch.stack(logits_steps, dim=1)
 
         # fast path (shrink batch over time)
-        max_steps = int(lengths.max().item()) - 1  # predict next token for steps
+        #max_steps = int(lengths.max().item()) - 1  # predict next token for steps
+        #logits = feats.new_zeros((B, max_steps, self.vocab_size))
+        max_steps = int(lengths.max().item()) - 1
         logits = feats.new_zeros((B, max_steps, self.vocab_size))
+        alphas = feats.new_zeros((B, max_steps, N))
 
         for t in range(max_steps):
             batch_size_t = int((lengths > t).sum().item())
             h_t = h[:batch_size_t]
             c_t = c[:batch_size_t]
 
-            ctx, _ = self.attn(feats[:batch_size_t], h_t)
+            #ctx, _ = self.attn(feats[:batch_size_t], h_t)
+            ctx, alpha = self.attn(feats[:batch_size_t], h_t)
+            alphas[:batch_size_t, t, :] = alpha
+
             gate = self.sigmoid(self.f_beta(h_t))
             ctx = gate * ctx
 
