@@ -19,13 +19,14 @@ train:
   weight_decay: 1e-2
   grad_clip: 5.0
   num_workers: 2
-  save_dir:  "/content/drive/MyDrive/runs/flickr8k_mid"  #"runs/flickr8k_mid"
   print_every: 50
   beam_size_eval: 5
   amp: true
   pin_memory: true
   persistent_workers: true
   unfreeze_encoder_epoch: 3
+  save_dir:  "/content/drive/MyDrive/runs/flickr8k_mid"  #"runs/flickr8k_mid"
+
 
   alpha_c: 1.0              
   early_stop_patience: 10
