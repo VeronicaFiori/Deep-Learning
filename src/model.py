@@ -262,6 +262,9 @@ class DecoderLSTMAttn(nn.Module):
         lengths: (B,) real lengths incl BOS/EOS
         returns logits: (B, T, V) where T = max_steps = max(lengths)-1
         """
+        N = feats.size(1)  # num regions, 196 se 14x14
+        alphas = feats.new_zeros((B, max_steps, N))
+
         B, L = captions_ids.shape
         h, c = self.init_state(feats)
         emb = self.embed(captions_ids)  # (B,L,E)
@@ -270,7 +273,9 @@ class DecoderLSTMAttn(nn.Module):
         if lengths is None:
             logits_steps = []
             for t in range(L - 1):
-                ctx, _ = self.attn(feats, h)
+                ctx, alpha = self.attn(feats, h)
+                alphas[:batch_size_t, t, :] = alpha
+
                 gate = self.sigmoid(self.f_beta(h))
                 ctx = gate * ctx
                 x = torch.cat([emb[:, t, :], ctx], dim=1)
@@ -299,7 +304,7 @@ class DecoderLSTMAttn(nn.Module):
             h = torch.cat([h_new, h[batch_size_t:]], dim=0)
             c = torch.cat([c_new, c[batch_size_t:]], dim=0)
 
-        return logits
+        return logits,alphas
 
 
 class Captioner(nn.Module):
