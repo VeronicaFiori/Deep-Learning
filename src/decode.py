@@ -187,11 +187,11 @@ def beam_search(
     bos_id,
     eos_id,
     pad_id,
-    beam_size=5,
+    beam_size=3,
     max_len=40,
     device="cpu",
-    alpha=0.7,              # length normalization strength
-    min_len=1,              # minimum generated tokens (excluding BOS)
+    alpha=0.9,              # length normalization strength
+    min_len=6,              # minimum generated tokens (excluding BOS)
     no_repeat_ngram_size=3, # anti-repeat (3 = trigram blocking)
 ):
     model.eval()

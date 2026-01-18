@@ -496,10 +496,11 @@ def validate(model, loader, criterion, device, alpha_c=0.0):
         targets = caps[:, 1:]  # (B, L-1)
 
         # pack to remove pads / extra steps
-        scores_packed, _ = pack_padded_sequence(scores, decode_lengths, batch_first=True, enforce_sorted=True)
-        targets_packed, _ = pack_padded_sequence(targets, decode_lengths, batch_first=True, enforce_sorted=True)
+        scores_packed = pack_padded_sequence(scores, decode_lengths, batch_first=True, enforce_sorted=True).data
+        targets_packed = pack_padded_sequence(targets, decode_lengths, batch_first=True, enforce_sorted=True).data
 
         loss = criterion(scores_packed, targets_packed)
+
 
         # doubly stochastic attention (opzionale)
         if alpha_c > 0.0 and alphas is not None:
@@ -588,11 +589,18 @@ def main():
         dropout=cfg["model"]["dropout"],
     ).to(device)
 
-    criterion = nn.CrossEntropyLoss(ignore_index=vocab.pad_id).to(device)
+    #criterion = nn.CrossEntropyLoss(ignore_index=vocab.pad_id).to(device)
+    criterion = nn.CrossEntropyLoss(ignore_index=vocab.pad_id, label_smoothing=0.1).to(device)
+
 
     encoder_opt, decoder_opt = make_optimizers(
         model, decoder_lr=decoder_lr, encoder_lr=encoder_lr, weight_decay=weight_decay, fine_tune_encoder=False
     )
+
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        decoder_opt, mode="min", factor=0.5, patience=2, verbose=True
+    )
+
 
     # AMP
     use_amp = bool(cfg["train"].get("amp", False)) and device.type == "cuda"
@@ -666,10 +674,11 @@ def main():
                 decode_lengths = (caplens - 1).tolist()
                 targets = caps[:, 1:]
 
-                scores_packed, _ = pack_padded_sequence(scores, decode_lengths, batch_first=True, enforce_sorted=True)
-                targets_packed, _ = pack_padded_sequence(targets, decode_lengths, batch_first=True, enforce_sorted=True)
+                scores_packed = pack_padded_sequence(scores, decode_lengths, batch_first=True, enforce_sorted=True).data
+                targets_packed = pack_padded_sequence(targets, decode_lengths, batch_first=True, enforce_sorted=True).data
 
                 loss = criterion(scores_packed, targets_packed)
+
 
                 if alpha_c > 0.0 and alphas is not None:
                     loss = loss + alpha_c * ((1.0 - alphas.sum(dim=1)) ** 2).mean()
@@ -697,6 +706,8 @@ def main():
 
         # ----- validation -----
         val_loss = validate(model, val_loader, criterion, device, alpha_c=alpha_c)
+        scheduler.step(val_loss)
+
         print(f"epoch {epoch} [val] loss_per_tok={val_loss:.4f}")
 
         # LR decay logic like tutorial (simpler)

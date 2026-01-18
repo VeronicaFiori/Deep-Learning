@@ -165,7 +165,8 @@ class EncoderCNN(nn.Module):
     """
     def __init__(self, fine_tune: bool = False, encoded_image_size: int = 14):
         super().__init__()
-        resnet = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+        #resnet = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+        resnet = models.resnet101(weights=models.ResNet101_Weights.DEFAULT)
 
         # Remove avgpool & fc
         self.backbone = nn.Sequential(*list(resnet.children())[:-2])

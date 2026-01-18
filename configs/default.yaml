@@ -12,30 +12,30 @@ data:
   min_word_freq: 3
 
 train:
-  batch_size: 64
-  epochs: 25
-  lr:  4e-4
-  lr_encoder: 1e-5
+  batch_size: 32           # ↓ meglio per fine-tune encoder e stabilità
+  epochs: 60               # ↑ ma con early stopping
+  lr: 3e-4                 # leggermente più stabile di 4e-4
+  lr_encoder: 2e-5         # ↑ un filo più alto (grounding migliore)
+  unfreeze_encoder_epoch: 2
+
   weight_decay: 1e-2
   grad_clip: 5.0
   num_workers: 2
   print_every: 50
-  beam_size_eval: 5
+
+  beam_size_eval: 3        # ↓ spesso meno “template” di 5
   amp: true
   pin_memory: true
   persistent_workers: true
-  unfreeze_encoder_epoch: 3
-  save_dir:  "/content/drive/MyDrive/runs/flickr8k_mid"  #"runs/flickr8k_mid"
 
-
-  alpha_c: 1.0              
+  alpha_c: 0.5             # ↓ meno “vincolo”, spesso migliora caption specifiche
   early_stop_patience: 10
-  lr_decay_every: 4
-  lr_decay_gamma: 0.8
+
+  save_dir: "/content/drive/MyDrive/runs/flickr8k_mid_run1" # "runs/flickr8k_mid"
 
 model:
   embed_dim: 256
   hidden_dim: 512
   attn_dim: 512
-  dropout: 0.3
+  dropout: 0.4
   fine_tune_encoder: false
