@@ -598,7 +598,7 @@ def main():
     )
 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        decoder_opt, mode="min", factor=0.5, patience=2, verbose=True
+        decoder_opt, mode="min", factor=0.5, patience=2
     )
 
 
@@ -707,6 +707,9 @@ def main():
         # ----- validation -----
         val_loss = validate(model, val_loader, criterion, device, alpha_c=alpha_c)
         scheduler.step(val_loss)
+        lr_now = decoder_opt.param_groups[0]["lr"]
+        print(f"[scheduler] lr={lr_now:.2e}")
+
 
         print(f"epoch {epoch} [val] loss_per_tok={val_loss:.4f}")
 
