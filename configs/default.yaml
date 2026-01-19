@@ -2,13 +2,13 @@ seed: 42
 device: "cuda"   # set to "cpu" if no NVIDIA GPU
 
 data:
-  root: "/content/drive/MyDrive/data/flickr8k" #"data/flickr8k"
-  images_dir: "Images"
+  root: "/workspace/data/flickr8k" # "/content/drive/MyDrive/data/flickr8k" #"data/flickr8k"
+  images_dir: "images"
   captions_file: "Flickr8k.token.txt"
   train_list: "Flickr_8k.trainImages.txt"
   val_list: "Flickr_8k.devImages.txt"
   test_list: "Flickr_8k.testImages.txt"
-  max_len: 40
+  max_len: 50
   min_word_freq: 3
 
 train:
@@ -20,7 +20,7 @@ train:
 
   weight_decay: 1e-2
   grad_clip: 5.0
-  num_workers: 2
+  num_workers: 4
   print_every: 50
 
   beam_size_eval: 3        # ↓ spesso meno “template” di 5
@@ -31,7 +31,7 @@ train:
   alpha_c: 0.5             # ↓ meno “vincolo”, spesso migliora caption specifiche
   early_stop_patience: 10
 
-  save_dir: "/content/drive/MyDrive/runs/flickr8k_mid_run1" # "runs/flickr8k_mid"
+  save_dir: "/workspace/runs/flickr8k_mid_run1" #"/content/drive/MyDrive/runs/flickr8k_mid_run1" # "runs/flickr8k_mid"
 
 model:
   embed_dim: 256
